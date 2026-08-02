@@ -1,0 +1,186 @@
+"""教学版运行时：srt 沙盒、两个 shell 工具和 DeepSeek 权限审核。"""
+
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import tempfile
+from pathlib import Path
+
+from openai import OpenAI
+
+from minimal_prompts import REVIEWER_PROMPT
+
+
+MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+REVIEW_MODEL = os.getenv("DEEPSEEK_REVIEW_MODEL", MODEL)
+PERMISSION_MODE = os.getenv("PERMISSION_MODE", "autoreview").lower()
+_LOCAL_SRT = Path(__file__).resolve().parents[1] / "node_modules" / ".bin" / (
+    "srt.cmd" if os.name == "nt" else "srt"
+)
+SRT_COMMAND = os.getenv(
+    "SRT_COMMAND", str(_LOCAL_SRT) if _LOCAL_SRT.exists() else "srt"
+)
+
+
+def permission_mode() -> str:
+    """返回当前会话的权限模式。"""
+    return PERMISSION_MODE
+
+
+def set_permission_mode(mode: str) -> None:
+    """让 CLI 斜杠命令切换当前会话的权限模式。"""
+    global PERMISSION_MODE
+    PERMISSION_MODE = mode
+
+
+def _command_tool(name: str, description: str) -> dict:
+    """生成两个形状相同的命令工具描述，避免重复 JSON。"""
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
+            },
+        },
+    }
+
+
+# 只有这两个工具会发给模型：普通命令先进沙盒，两个工具都受权限模式控制。
+TOOLS = [
+    _command_tool(
+        "bash",
+        "Run a shell command inside the default local srt sandbox. "
+        "It is reviewed before execution; use it for normal workspace work.",
+    ),
+    _command_tool(
+        "host_bash",
+        "Request one shell command outside the srt sandbox. "
+        "This is privileged and reviewed by the host; use it for safe work "
+        "when the task calls for host access.",
+    ),
+]
+
+
+def _shell_argv(command: str) -> list[str]:
+    """把模型命令交给当前平台的 shell，不经过额外的宿主 shell。"""
+    if os.name != "nt":
+        return ["bash", "-lc", command]
+
+    shell = os.getenv("AGENT_SHELL", "powershell").lower()
+    if shell in {"bash", "git-bash"}:
+        return [os.getenv("GIT_BASH_PATH", "bash.exe"), "-lc", command]
+    return [
+        "powershell.exe",
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        command,
+    ]
+
+
+def _decode(data: bytes) -> str:
+    """兼容 PowerShell、Git Bash 和普通 UTF-8 输出。"""
+    encoding = "utf-16-le" if b"\x00" in data else "utf-8"
+    return data.decode(encoding, errors="replace")
+
+
+def _run(argv: list[str]) -> str:
+    """执行一个已经组装好的 argv，并把退出码交给模型。"""
+    env = os.environ.copy()
+    env.pop("DEEPSEEK_API_KEY", None)
+    result = subprocess.run(argv, cwd=Path.cwd(), env=env, capture_output=True)
+    output = _decode(result.stdout) + _decode(result.stderr)
+    return f"{output}\n[exit code: {result.returncode}]"
+
+
+def _settings_file() -> Path:
+    """为每次沙盒调用生成宿主控制的临时策略，避免项目文件能改权限。"""
+    workspace = Path.cwd().resolve()
+    settings = {
+        "network": {"allowedDomains": [], "deniedDomains": ["*"]},
+        "filesystem": {
+            # srt 要求这两个字段存在；空数组表示不额外打 ACL 拒绝标记。
+            "denyRead": [],
+            "denyWrite": [],
+            "allowWrite": [str(workspace)],
+        },
+    }
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", suffix=".json", delete=False
+    ) as file:
+        json.dump(settings, file, ensure_ascii=False, indent=2)
+        return Path(file.name)
+
+
+def sandbox_bash(command: str) -> str:
+    """默认工具：用 srt 包住 shell，网络默认关闭。"""
+    settings = _settings_file()
+    try:
+        return _run([SRT_COMMAND, "--settings", str(settings), *_shell_argv(command)])
+    finally:
+        settings.unlink(missing_ok=True)
+
+
+def host_bash(command: str) -> str:
+    """特权工具：审核通过后才在宿主 shell 中执行。"""
+    return _run(_shell_argv(command))
+
+
+def _review(
+    client: OpenAI, name: str, command: str, user_request: str
+) -> tuple[str, str]:
+    """让同一个 DeepSeek API 审核工具请求。"""
+    request = json.dumps(
+        {
+            "user_request": user_request,
+            "command": command,
+            "working_directory": str(Path.cwd()),
+            "requested_tool": name,
+        },
+        ensure_ascii=False,
+    )
+    response = client.chat.completions.create(
+        model=REVIEW_MODEL,
+        messages=[
+            {"role": "system", "content": REVIEWER_PROMPT},
+            {"role": "user", "content": f"<request>{request}</request>"},
+        ],
+        reasoning_effort="max",
+        extra_body={"thinking": {"type": "enabled"}},
+    )
+    decision = json.loads(response.choices[0].message.content)
+    return decision["decision"], decision.get("reason", "")
+
+
+def _permission(
+    client: OpenAI, name: str, command: str, user_request: str
+) -> tuple[str, str]:
+    if PERMISSION_MODE == "manual":
+        decision = "allow" if input("允许这条命令执行吗？[y/N] ").lower() == "y" else "deny"
+        return decision, "用户确认" if decision == "allow" else "用户拒绝"
+    if PERMISSION_MODE == "deny":
+        return "deny", "权限模式为 deny"
+    return _review(client, name, command, user_request)
+
+
+def run_tool(
+    name: str, command: str, client: OpenAI, user_request: str
+) -> tuple[str, str | None]:
+    """运行模型请求的工具，并返回工具内容和可显示的权限审计信息。"""
+    if name not in {"bash", "host_bash"}:
+        return f"Unknown tool: {name}", None
+
+    decision, reason = _permission(client, name, command, user_request)
+    audit = f"{PERMISSION_MODE}: {decision} — {reason}"
+
+    if decision != "allow":
+        return f"[permission denied]\n{reason}", audit
+    output = sandbox_bash(command) if name == "bash" else host_bash(command)
+    return output, audit

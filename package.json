@@ -1,0 +1,10 @@
+{
+  "name": "minimum-agent-loop-sandbox",
+  "private": true,
+  "scripts": {
+    "sandbox:install": "srt windows-install"
+  },
+  "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.67"
+  }
+}

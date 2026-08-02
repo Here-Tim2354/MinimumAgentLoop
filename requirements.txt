@@ -1,0 +1,2 @@
+# Python runtime dependency; the local srt runtime is declared in package.json.
+openai>=2.21,<3
