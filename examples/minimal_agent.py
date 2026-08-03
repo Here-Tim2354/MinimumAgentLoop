@@ -4,24 +4,8 @@ import os
 from openai import OpenAI
 
 from minimal_prompts import SYSTEM_PROMPT  # 主模型的行为规则和权限边界。
-from minimal_runtime import (  # 工具描述、srt 沙盒、host_bash 和权限模式。
-    MODEL,
-    TOOLS,
-    permission_mode,
-    run_tool,
-    set_permission_mode,
-    sandbox_enabled,
-    set_sandbox_enabled,
-)
-from minimal_support import (
-    read_user_message,  # 读取并显示橙黄色的用户输入。
-    render_answer,  # 用蓝色显示最终回答。
-    render_reasoning,  # 显示模型已经返回的思考内容。
-    render_thinking,  # 在每次模型请求前显示“思考中”。
-    render_tool_call,  # 用 LSP 色显示工具名称和命令。
-    render_tool_result,  # 显示工具输出并标记工具区域结束。
-    render_permission,  # 显示工具权限状态和审核结果。
-)
+import minimal_runtime as runtime  # 工具描述、srt 沙盒、host_bash 和权限模式。
+import minimal_support as support  # 终端输入和渲染。
 
 
 def main() -> None:
@@ -30,7 +14,7 @@ def main() -> None:
         "\n权限：/auto 自动审核 | /ask-me 每次询问 | /deny 拒绝工具 | /yolo 跳过审核"
         "\n沙盒：/on 开启 | /off 关闭"
         "\n其他：/expand 展开本轮工具输出 | /exit 退出"
-        f"\n当前：沙盒{'开启' if sandbox_enabled() else '关闭'}；权限：{permission_mode()}。"
+        f"\n当前：沙盒{'开启' if runtime.sandbox_enabled() else '关闭'}；权限：{runtime.permission_mode()}。"
         "\nWindows 首次运行前执行：npm run sandbox:install（需要一次 UAC）。"
     )
     client = OpenAI(
@@ -47,7 +31,7 @@ def main() -> None:
     ]
 
     # 外层循环处理用户消息，内层循环处理同一条消息可能触发的多次工具调用。
-    while prompt := read_user_message():
+    while prompt := support.read_user_message():
         if prompt in {"/auto", "/ask-me", "/deny", "/yolo"}:
             mode = {
                 "/auto": "autoreview",
@@ -55,24 +39,24 @@ def main() -> None:
                 "/deny": "deny",
                 "/yolo": "yolo",
             }[prompt]
-            set_permission_mode(mode)
-            render_permission(f"权限模式已切换为 {permission_mode()}")
+            runtime.set_permission_mode(mode)
+            support.render_permission(f"权限模式已切换为 {runtime.permission_mode()}")
             continue
         if prompt in {"/on", "/off"}:
-            set_sandbox_enabled(prompt == "/on")
-            state = "开启" if sandbox_enabled() else "关闭"
-            destination = "使用 srt" if sandbox_enabled() else "直接在宿主机执行"
-            render_permission(f"沙盒已{state}；bash 将{destination}")
+            runtime.set_sandbox_enabled(prompt == "/on")
+            state = "开启" if runtime.sandbox_enabled() else "关闭"
+            destination = "使用 srt" if runtime.sandbox_enabled() else "直接在宿主机执行"
+            support.render_permission(f"沙盒已{state}；bash 将{destination}")
             continue
 
         messages.append({"role": "user", "content": prompt})
 
         while True:
-            render_thinking()
+            support.render_thinking()
             response = client.chat.completions.create(
-                model=MODEL,
+                model=runtime.MODEL,
                 messages=messages,
-                tools=TOOLS,
+                tools=runtime.TOOLS,
                 reasoning_effort="max",
                 extra_body={"thinking": {"type": "enabled"}},
             )
@@ -80,22 +64,22 @@ def main() -> None:
             # assistant 消息必须先写回上下文，下一次请求才能知道刚才做了什么。
             messages.append(message)
             if message.get("reasoning_content"):
-                render_reasoning(message["reasoning_content"])
+                support.render_reasoning(message["reasoning_content"])
             calls = message.get("tool_calls") or []
             if not calls:
-                render_answer(message.get("content") or "")
+                support.render_answer(message.get("content") or "")
                 break
 
             # 一次响应可能包含多个 Bash 调用，全部执行后再让模型继续判断。
             for call in calls:
                 name = call["function"]["name"]
                 command = json.loads(call["function"]["arguments"])["command"]
-                render_tool_call(name, command)
-                render_permission(f"{permission_mode()} 权限检查中……")
-                output, audit = run_tool(name, command, client, prompt)
+                support.render_tool_call(name, command)
+                support.render_permission(f"{runtime.permission_mode()} 权限检查中……")
+                output, audit = runtime.run_tool(name, command, client, prompt)
                 if audit:
-                    render_permission(audit)
-                render_tool_result(output)
+                    support.render_permission(audit)
+                support.render_tool_result(output)
                 # tool_call_id 把执行结果和对应的 assistant 调用配对起来。
                 messages.append(
                     {
