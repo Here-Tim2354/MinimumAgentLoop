@@ -17,6 +17,7 @@ MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 REVIEW_MODEL = os.getenv("DEEPSEEK_REVIEW_MODEL", MODEL)
 PERMISSION_MODE = os.getenv("PERMISSION_MODE", "autoreview").lower()
 SANDBOX_ENABLED = True
+CONTEXT_WINDOW = int(os.getenv("DEEPSEEK_CONTEXT_WINDOW", "1000000"))
 _LOCAL_SRT = Path(__file__).resolve().parents[1] / "node_modules" / ".bin" / (
     "srt.cmd" if os.name == "nt" else "srt"
 )
@@ -45,6 +46,17 @@ def set_sandbox_enabled(enabled: bool) -> None:
     """让 CLI 斜杠命令切换当前会话的沙盒。"""
     global SANDBOX_ENABLED
     SANDBOX_ENABLED = enabled
+
+
+def context_usage(response) -> tuple[int, int, int, int]:
+    """返回上下文上限和本次 API 请求实际使用的 token 数。"""
+    usage = response.usage
+    return (
+        CONTEXT_WINDOW,
+        usage.prompt_tokens,
+        usage.completion_tokens,
+        usage.total_tokens,
+    )
 
 
 def _command_tool(name: str, description: str) -> dict:

@@ -60,6 +60,7 @@ def main() -> None:
                 reasoning_effort="max",
                 extra_body={"thinking": {"type": "enabled"}},
             )
+            support.render_context_usage(runtime.context_usage(response))
             message = response.choices[0].message.model_dump(exclude_none=True)
             # assistant 消息必须先写回上下文，下一次请求才能知道刚才做了什么。
             messages.append(message)

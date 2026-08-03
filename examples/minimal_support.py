@@ -16,6 +16,15 @@ def render_thinking() -> None:
     print(f"\n{THINKING}[thinking] 思考中...{RESET}", flush=True)
 
 
+def render_context_usage(usage: tuple[int, int, int, int]) -> None:
+    capacity, prompt_tokens, completion_tokens, total_tokens = usage
+    print(
+        f"{THINKING}[context] 上下文 {prompt_tokens:,}/{capacity:,} tokens；"
+        f"本次输出 {completion_tokens:,}；请求合计 {total_tokens:,}{RESET}",
+        flush=True,
+    )
+
+
 def render_reasoning(content: str) -> None:
     # reasoning_content 是模型已经返回的思考文本，用灰色和最终回答区分开。
     print(f"{THINKING}[thinking] 思考内容{RESET}\n{THINKING}{content}{RESET}")
