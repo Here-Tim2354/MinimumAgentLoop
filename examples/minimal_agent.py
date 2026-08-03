@@ -1,11 +1,15 @@
+# pyright: reportImplicitRelativeImport=false
+
 import json
 import os
+from collections.abc import Iterable
+from typing import Any, cast
 
-from openai import OpenAI
-
-from minimal_prompts import SYSTEM_PROMPT  # 主模型的行为规则和权限边界。
 import minimal_runtime as runtime  # 工具描述、srt 沙盒、host_bash 和权限模式。
 import minimal_support as support  # 终端输入和渲染。
+from minimal_prompts import SYSTEM_PROMPT  # 主模型的行为规则和权限边界。
+from openai import OpenAI
+from openai.types.chat import ChatCompletionMessageParam
 
 
 def main() -> None:
@@ -17,7 +21,7 @@ def main() -> None:
     )
     # messages 是整个会话的上下文，模型每次都会看到之前的 assistant 和 tool 消息。
     # 不同消息（user、assistant、tool）形状不同，交给 SDK 统一接收。
-    messages: list[dict] = [
+    messages: list[dict[str, Any]] = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT,
@@ -50,12 +54,12 @@ def main() -> None:
             support.render_thinking()
             response = client.chat.completions.create(
                 model=runtime.MODEL,
-                messages=messages,
+                messages=cast(Iterable[ChatCompletionMessageParam], messages),
                 tools=runtime.TOOLS,
                 reasoning_effort="max",
                 extra_body={"thinking": {"type": "enabled"}},
             )
-            message = response.choices[0].message.model_dump(exclude_none=True)
+            message: dict[str, Any] = response.choices[0].message.model_dump(exclude_none=True)
             # assistant 消息必须先写回上下文，下一次请求才能知道刚才做了什么。
             messages.append(message)
             if message.get("reasoning_content"):

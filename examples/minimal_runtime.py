@@ -1,5 +1,7 @@
 """教学版运行时：srt 沙盒、两个 shell 工具和 DeepSeek 权限审核。"""
 
+# pyright: reportImplicitRelativeImport=false
+
 from __future__ import annotations
 
 import json
@@ -7,16 +9,16 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-
-from openai import OpenAI
+from typing import cast
 
 from minimal_prompts import REVIEWER_PROMPT
-
+from openai import OpenAI
+from openai.types.chat import ChatCompletionToolParam
 
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 REVIEW_MODEL = os.getenv("DEEPSEEK_REVIEW_MODEL", MODEL)
-PERMISSION_MODE = os.getenv("PERMISSION_MODE", "autoreview").lower()
-SANDBOX_ENABLED = True
+_permission_mode = os.getenv("PERMISSION_MODE", "autoreview").lower()
+_sandbox_enabled = True
 CONTEXT_WINDOW = int(os.getenv("DEEPSEEK_CONTEXT_WINDOW", "1000000"))
 _LOCAL_SRT = Path(__file__).resolve().parents[1] / "node_modules" / ".bin" / (
     "srt.cmd" if os.name == "nt" else "srt"
@@ -28,24 +30,24 @@ SRT_COMMAND = os.getenv(
 
 def permission_mode() -> str:
     """返回当前会话的权限模式。"""
-    return PERMISSION_MODE
+    return _permission_mode
 
 
 def set_permission_mode(mode: str) -> None:
     """让 CLI 斜杠命令切换当前会话的权限模式。"""
-    global PERMISSION_MODE
-    PERMISSION_MODE = mode
+    global _permission_mode
+    _permission_mode = mode
 
 
 def sandbox_enabled() -> bool:
     """返回当前会话是否启用 srt 沙盒。"""
-    return SANDBOX_ENABLED
+    return _sandbox_enabled
 
 
 def set_sandbox_enabled(enabled: bool) -> None:
     """让 CLI 斜杠命令切换当前会话的沙盒。"""
-    global SANDBOX_ENABLED
-    SANDBOX_ENABLED = enabled
+    global _sandbox_enabled
+    _sandbox_enabled = enabled
 
 
 def context_usage(
@@ -61,24 +63,30 @@ def context_usage(
     )
 
 
-def _command_tool(name: str, description: str) -> dict:
+def _command_tool(name: str, description: str) -> ChatCompletionToolParam:
     """生成两个形状相同的命令工具描述，避免重复 JSON。"""
-    return {
-        "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {
-                "type": "object",
-                "properties": {"command": {"type": "string"}},
-                "required": ["command"],
+    return cast(
+        ChatCompletionToolParam,
+        cast(
+            object,
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": description,
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"command": {"type": "string"}},
+                        "required": ["command"],
+                    },
+                },
             },
-        },
-    }
+        ),
+    )
 
 
 # 只有这两个工具会发给模型：bash 默认先进沙盒，两个工具都受权限模式控制。
-TOOLS = [
+TOOLS: list[ChatCompletionToolParam] = [
     _command_tool(
         "bash",
         "Run a shell command in the default local srt sandbox. "
@@ -121,7 +129,9 @@ def _run(argv: list[str]) -> str:
     """执行一个已经组装好的 argv，并把退出码交给模型。"""
     env = os.environ.copy()
     env.pop("DEEPSEEK_API_KEY", None)
-    result = subprocess.run(argv, cwd=Path.cwd(), env=env, capture_output=True)
+    result = subprocess.run(
+        argv, cwd=Path.cwd(), env=env, capture_output=True, check=False
+    )
     output = _decode(result.stdout) + _decode(result.stderr)
     return f"{output}\n[exit code: {result.returncode}]"
 
@@ -181,19 +191,19 @@ def _review(
         reasoning_effort="max",
         extra_body={"thinking": {"type": "enabled"}},
     )
-    decision = json.loads(response.choices[0].message.content)
+    decision = json.loads(response.choices[0].message.content or "{}")
     return decision["decision"], decision.get("reason", "")
 
 
 def _permission(
     client: OpenAI, name: str, command: str, user_request: str
 ) -> tuple[str, str]:
-    if PERMISSION_MODE == "yolo":
+    if _permission_mode == "yolo":
         return "allow", "已跳过权限审核"
-    if PERMISSION_MODE == "manual":
+    if _permission_mode == "manual":
         decision = "allow" if input("允许这条命令执行吗？[y/N] ").lower() == "y" else "deny"
         return decision, "用户确认" if decision == "allow" else "用户拒绝"
-    if PERMISSION_MODE == "deny":
+    if _permission_mode == "deny":
         return "deny", "权限模式为 deny"
     return _review(client, name, command, user_request)
 
@@ -206,11 +216,13 @@ def run_tool(
         return f"Unknown tool: {name}", None
 
     decision, reason = _permission(client, name, command, user_request)
-    audit = f"{PERMISSION_MODE}: {decision} — {reason}"
+    audit = f"{_permission_mode}: {decision} — {reason}"
 
     if decision != "allow":
         return f"[permission denied]\n{reason}", audit
     output = (
-        sandbox_bash(command) if name == "bash" and SANDBOX_ENABLED else host_bash(command)
+        sandbox_bash(command)
+        if name == "bash" and _sandbox_enabled
+        else host_bash(command)
     )
     return output, audit
