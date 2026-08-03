@@ -17,10 +17,15 @@ def render_thinking() -> None:
 
 
 def render_context_usage(usage: tuple[int, int, int, int]) -> None:
-    capacity, prompt_tokens, completion_tokens, total_tokens = usage
+    capacity, prompt_tokens, _, total_tokens = usage
+    capacity_label = (
+        f"{capacity // 1_000_000}M"
+        if capacity >= 1_000_000 and capacity % 1_000_000 == 0
+        else f"{capacity:,}"
+    )
     print(
-        f"{THINKING}[context] 上下文 {prompt_tokens:,}/{capacity:,} tokens；"
-        f"本次输出 {completion_tokens:,}；请求合计 {total_tokens:,}{RESET}",
+        f"{THINKING}[context] 当前上下文长度：{prompt_tokens:,}/{capacity_label}；"
+        f"本轮对话：{total_tokens:,}Tokens{RESET}",
         flush=True,
     )
 
