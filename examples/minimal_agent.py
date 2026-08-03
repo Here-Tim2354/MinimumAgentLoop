@@ -51,11 +51,18 @@ def main() -> None:
                 model=runtime.MODEL,
                 messages=messages,
                 tools=runtime.TOOLS,
-                extra_body={"thinking": {"type": "disabled"}},
+                reasoning_effort="max",
+                extra_body={"thinking": {"type": "enabled"}},
             )
             message = response.choices[0].message.model_dump(exclude_none=True)
-            messages.append(message)
+            reasoning_content = message.get("reasoning_content")
             calls = message.get("tool_calls") or []
+            # 最终回复的思考不进入下一轮；工具调用中的思考必须保留。
+            if not calls:
+                message.pop("reasoning_content", None)
+            messages.append(message)
+            if reasoning_content:
+                support.render_reasoning(reasoning_content)
             if not calls:
                 support.render_answer(message.get("content") or "")
                 support.render_context_usage(runtime.context_usage(response))
