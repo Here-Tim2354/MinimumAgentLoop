@@ -48,14 +48,16 @@ def set_sandbox_enabled(enabled: bool) -> None:
     SANDBOX_ENABLED = enabled
 
 
-def context_usage(response) -> tuple[int, int, int, int]:
-    """返回上下文上限和本次 API 请求实际使用的 token 数。"""
-    usage = response.usage
+def context_usage(
+    response, previous_context_tokens: int | None
+) -> tuple[int, int, int]:
+    """返回当前完整上下文长度，以及和上一轮的 token 差值。"""
+    current_context_tokens = response.usage.total_tokens
+    previous = previous_context_tokens or 0
     return (
         CONTEXT_WINDOW,
-        usage.prompt_tokens,
-        usage.completion_tokens,
-        usage.total_tokens,
+        current_context_tokens,
+        max(0, current_context_tokens - previous),
     )
 
 
