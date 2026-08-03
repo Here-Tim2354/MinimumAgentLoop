@@ -10,6 +10,8 @@ from minimal_runtime import (  # 工具描述、srt 沙盒、host_bash 和权限
     permission_mode,
     run_tool,
     set_permission_mode,
+    sandbox_enabled,
+    set_sandbox_enabled,
 )
 from minimal_support import (
     read_user_message,  # 读取并显示橙黄色的用户输入。
@@ -23,11 +25,12 @@ from minimal_support import (
 
 
 def main() -> None:
-    # 启动时告诉用户：工具输出默认折叠，权限可以在会话中切换。
+    # 启动时展示会话控制命令和当前运行状态。
     print(
-        "\n命令：/auto 自动审核；/ask-me 每次询问；/deny 拒绝工具；/yolo 跳过审核；"
-        "/expand 展开输出；/exit 退出。"
-        f"\n沙盒：srt（默认开启）；权限：{permission_mode()}。"
+        "\n权限：/auto 自动审核 | /ask-me 每次询问 | /deny 拒绝工具 | /yolo 跳过审核"
+        "\n沙盒：/on 开启 | /off 关闭"
+        "\n其他：/expand 展开本轮工具输出 | /exit 退出"
+        f"\n当前：沙盒{'开启' if sandbox_enabled() else '关闭'}；权限：{permission_mode()}。"
         "\nWindows 首次运行前执行：npm run sandbox:install（需要一次 UAC）。"
     )
     client = OpenAI(
@@ -54,6 +57,12 @@ def main() -> None:
             }[prompt]
             set_permission_mode(mode)
             render_permission(f"权限模式已切换为 {permission_mode()}")
+            continue
+        if prompt in {"/on", "/off"}:
+            set_sandbox_enabled(prompt == "/on")
+            state = "开启" if sandbox_enabled() else "关闭"
+            destination = "使用 srt" if sandbox_enabled() else "直接在宿主机执行"
+            render_permission(f"沙盒已{state}；bash 将{destination}")
             continue
 
         messages.append({"role": "user", "content": prompt})

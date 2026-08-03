@@ -16,6 +16,7 @@ from minimal_prompts import REVIEWER_PROMPT
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 REVIEW_MODEL = os.getenv("DEEPSEEK_REVIEW_MODEL", MODEL)
 PERMISSION_MODE = os.getenv("PERMISSION_MODE", "autoreview").lower()
+SANDBOX_ENABLED = True
 _LOCAL_SRT = Path(__file__).resolve().parents[1] / "node_modules" / ".bin" / (
     "srt.cmd" if os.name == "nt" else "srt"
 )
@@ -35,6 +36,17 @@ def set_permission_mode(mode: str) -> None:
     PERMISSION_MODE = mode
 
 
+def sandbox_enabled() -> bool:
+    """返回当前会话是否启用 srt 沙盒。"""
+    return SANDBOX_ENABLED
+
+
+def set_sandbox_enabled(enabled: bool) -> None:
+    """让 CLI 斜杠命令切换当前会话的沙盒。"""
+    global SANDBOX_ENABLED
+    SANDBOX_ENABLED = enabled
+
+
 def _command_tool(name: str, description: str) -> dict:
     """生成两个形状相同的命令工具描述，避免重复 JSON。"""
     return {
@@ -51,17 +63,17 @@ def _command_tool(name: str, description: str) -> dict:
     }
 
 
-# 只有这两个工具会发给模型：普通命令先进沙盒，两个工具都受权限模式控制。
+# 只有这两个工具会发给模型：bash 默认先进沙盒，两个工具都受权限模式控制。
 TOOLS = [
     _command_tool(
         "bash",
-        "Run a shell command inside the default local srt sandbox. "
-        "It is reviewed before execution; use it for normal workspace work.",
+        "Run a shell command in the default local srt sandbox. "
+        "The host may disable the sandbox for this session; use it for normal workspace work.",
     ),
     _command_tool(
         "host_bash",
         "Request one shell command outside the srt sandbox. "
-        "This is privileged and reviewed by the host; use it for safe work "
+        "It is subject to the current host permission mode; use it for safe work "
         "when the task calls for host access.",
     ),
 ]
@@ -129,7 +141,7 @@ def sandbox_bash(command: str) -> str:
 
 
 def host_bash(command: str) -> str:
-    """特权工具：审核通过后才在宿主 shell 中执行。"""
+    """特权工具：在宿主 shell 中执行。"""
     return _run(_shell_argv(command))
 
 
@@ -184,5 +196,7 @@ def run_tool(
 
     if decision != "allow":
         return f"[permission denied]\n{reason}", audit
-    output = sandbox_bash(command) if name == "bash" else host_bash(command)
+    output = (
+        sandbox_bash(command) if name == "bash" and SANDBOX_ENABLED else host_bash(command)
+    )
     return output, audit
