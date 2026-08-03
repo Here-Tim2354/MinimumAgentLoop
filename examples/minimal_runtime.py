@@ -176,8 +176,7 @@ def _review(
             {"role": "system", "content": REVIEWER_PROMPT},
             {"role": "user", "content": f"<request>{request}</request>"},
         ],
-        reasoning_effort="max",
-        extra_body={"thinking": {"type": "enabled"}},
+        extra_body={"thinking": {"type": "disabled"}},
     )
     decision = json.loads(response.choices[0].message.content)
     return decision["decision"], decision.get("reason", "")
