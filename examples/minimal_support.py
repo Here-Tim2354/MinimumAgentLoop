@@ -78,3 +78,7 @@ def read_user_message() -> str | None:
 def render_answer(content: str) -> None:
     # 这是一次模型循环的最终回答，用蓝色结束当前用户请求。
     print(f"\n{ANSWER}Agent> {content}{RESET}")
+
+
+def render_goodbye() -> None:
+    print(f"\n{ANSWER}Agent> 好的，先告辞啦！👋{RESET}", flush=True)

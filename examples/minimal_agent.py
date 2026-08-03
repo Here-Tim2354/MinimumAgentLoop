@@ -13,7 +13,7 @@ def main() -> None:
     print(
         "\n权限：/auto 自动审核 | /ask-me 每次询问 | /deny 拒绝工具 | /yolo 跳过审核"
         "\n沙盒：/on 开启 | /off 关闭"
-        "\n其他：/expand 展开本轮工具输出 | /exit 退出"
+        "\n其他：/expand 展开本轮工具输出 | /exit 或 Ctrl+C 退出"
         f"\n当前：沙盒{'开启' if runtime.sandbox_enabled() else '关闭'}；权限：{runtime.permission_mode()}。"
         "\nWindows 首次运行前执行：npm run sandbox:install（需要一次 UAC）。"
     )
@@ -92,4 +92,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        support.render_goodbye()
