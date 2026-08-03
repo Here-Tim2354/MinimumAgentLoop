@@ -24,7 +24,7 @@ def render_context_usage(usage: tuple[int, int, int, int]) -> None:
         else f"{capacity:,}"
     )
     print(
-        f"{THINKING}[context] 当前上下文长度：{prompt_tokens:,}/{capacity_label}；"
+        f"{ANSWER}[context] 当前上下文长度：{prompt_tokens:,}/{capacity_label}；"
         f"本轮对话：{total_tokens:,}Tokens{RESET}",
         flush=True,
     )
