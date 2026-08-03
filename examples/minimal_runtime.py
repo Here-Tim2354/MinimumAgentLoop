@@ -162,6 +162,8 @@ def _review(
 def _permission(
     client: OpenAI, name: str, command: str, user_request: str
 ) -> tuple[str, str]:
+    if PERMISSION_MODE == "yolo":
+        return "allow", "已跳过权限审核"
     if PERMISSION_MODE == "manual":
         decision = "allow" if input("允许这条命令执行吗？[y/N] ").lower() == "y" else "deny"
         return decision, "用户确认" if decision == "allow" else "用户拒绝"

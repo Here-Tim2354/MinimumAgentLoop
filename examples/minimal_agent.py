@@ -25,7 +25,7 @@ from minimal_support import (
 def main() -> None:
     # 启动时告诉用户：工具输出默认折叠，权限可以在会话中切换。
     print(
-        "\n命令：/auto 自动审核；/ask-me 每次询问；/deny 拒绝工具；"
+        "\n命令：/auto 自动审核；/ask-me 每次询问；/deny 拒绝工具；/yolo 跳过审核；"
         "/expand 展开输出；/exit 退出。"
         f"\n沙盒：srt（默认开启）；权限：{permission_mode()}。"
         "\nWindows 首次运行前执行：npm run sandbox:install（需要一次 UAC）。"
@@ -45,8 +45,13 @@ def main() -> None:
 
     # 外层循环处理用户消息，内层循环处理同一条消息可能触发的多次工具调用。
     while prompt := read_user_message():
-        if prompt in {"/auto", "/ask-me", "/deny"}:
-            mode = {"/auto": "autoreview", "/ask-me": "manual", "/deny": "deny"}[prompt]
+        if prompt in {"/auto", "/ask-me", "/deny", "/yolo"}:
+            mode = {
+                "/auto": "autoreview",
+                "/ask-me": "manual",
+                "/deny": "deny",
+                "/yolo": "yolo",
+            }[prompt]
             set_permission_mode(mode)
             render_permission(f"权限模式已切换为 {permission_mode()}")
             continue
