@@ -55,14 +55,11 @@ def main() -> None:
                 extra_body={"thinking": {"type": "enabled"}},
             )
             message = response.choices[0].message.model_dump(exclude_none=True)
-            reasoning_content = message.get("reasoning_content")
-            calls = message.get("tool_calls") or []
-            # 最终回复的思考不进入下一轮；工具调用中的思考必须保留。
-            if not calls:
-                message.pop("reasoning_content", None)
+            # assistant 消息必须先写回上下文，下一次请求才能知道刚才做了什么。
             messages.append(message)
-            if reasoning_content:
-                support.render_reasoning(reasoning_content)
+            if message.get("reasoning_content"):
+                support.render_reasoning(message["reasoning_content"])
+            calls = message.get("tool_calls") or []
             if not calls:
                 support.render_answer(message.get("content") or "")
                 support.render_context_usage(runtime.context_usage(response))
