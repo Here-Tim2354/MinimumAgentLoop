@@ -2,14 +2,12 @@
 
 import json
 import os
-from collections.abc import Iterable
-from typing import Any, cast
+from typing import Any
 
 import minimal_runtime as runtime  # 工具描述、srt 沙盒、host_bash 和权限模式。
 import minimal_support as support  # 终端输入和渲染。
 from minimal_prompts import SYSTEM_PROMPT  # 主模型的行为规则和权限边界。
 from openai import OpenAI
-from openai.types.chat import ChatCompletionMessageParam
 
 
 def main() -> None:
@@ -21,7 +19,7 @@ def main() -> None:
     )
     # messages 是整个会话的上下文，模型每次都会看到之前的 assistant 和 tool 消息。
     # 不同消息（user、assistant、tool）形状不同，交给 SDK 统一接收。
-    messages: list[dict[str, Any]] = [
+    messages: list[Any] = [
         {
             "role": "system",
             "content": SYSTEM_PROMPT,
@@ -30,7 +28,10 @@ def main() -> None:
     previous_context_tokens: int | None = None
 
     # 外层循环处理用户消息，内层循环处理同一条消息可能触发的多次工具调用。
-    while prompt := support.read_user_message():
+    while True:
+        prompt = support.read_user_message()
+        if not prompt:
+            break
         if prompt in {"/auto", "/ask-me", "/deny", "/yolo"}:
             mode = {
                 "/auto": "autoreview",
@@ -54,7 +55,7 @@ def main() -> None:
             support.render_thinking()
             response = client.chat.completions.create(
                 model=runtime.MODEL,
-                messages=cast(Iterable[ChatCompletionMessageParam], messages),
+                messages=messages,
                 tools=runtime.TOOLS,
                 reasoning_effort="max",
                 extra_body={"thinking": {"type": "enabled"}},

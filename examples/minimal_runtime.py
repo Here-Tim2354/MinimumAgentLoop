@@ -9,11 +9,10 @@ import os
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import cast
+from typing import Any
 
 from minimal_prompts import REVIEWER_PROMPT
 from openai import OpenAI
-from openai.types.chat import ChatCompletionToolParam
 
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 REVIEW_MODEL = os.getenv("DEEPSEEK_REVIEW_MODEL", MODEL)
@@ -63,30 +62,24 @@ def context_usage(
     )
 
 
-def _command_tool(name: str, description: str) -> ChatCompletionToolParam:
+def _command_tool(name: str, description: str) -> dict[str, Any]:
     """生成两个形状相同的命令工具描述，避免重复 JSON。"""
-    return cast(
-        ChatCompletionToolParam,
-        cast(
-            object,
-            {
-                "type": "function",
-                "function": {
-                    "name": name,
-                    "description": description,
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"command": {"type": "string"}},
-                        "required": ["command"],
-                    },
-                },
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": {"command": {"type": "string"}},
+                "required": ["command"],
             },
-        ),
-    )
+        },
+    }
 
 
 # 只有这两个工具会发给模型：bash 默认先进沙盒，两个工具都受权限模式控制。
-TOOLS: list[ChatCompletionToolParam] = [
+TOOLS: list[Any] = [
     _command_tool(
         "bash",
         "Run a shell command in the default local srt sandbox. "
