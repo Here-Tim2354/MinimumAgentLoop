@@ -65,6 +65,10 @@ def render_permission(content: str) -> None:
     print(f"\n{PERMISSION}[permission] {content}{RESET}")
 
 
+def render_think_level(content: str) -> None:
+    print(f"\n{PERMISSION}[think_level] {content}{RESET}")
+
+
 def render_tool_result(output: str) -> None:
     # 先保存并折叠输出，避免长日志淹没模型回答；/expand 会显示本轮全部输出。
     _tool_outputs.append(output)

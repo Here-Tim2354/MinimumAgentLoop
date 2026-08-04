@@ -40,7 +40,7 @@ def main() -> None:
             continue
         if prompt in {"/think-off", "/think-high", "/think-max"}:
             runtime.set_thinking_effort(prompt.removeprefix("/think-"))
-            support.render_permission(f"思考档位已切换为 {runtime.thinking_effort()}")
+            support.render_think_level(f"思考档位已切换为 {runtime.thinking_effort()}")
             continue
 
         messages.append({"role": "user", "content": prompt})
