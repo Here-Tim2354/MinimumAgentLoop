@@ -30,16 +30,22 @@ def render_thinking(effort: str) -> None:
     print(f"\n{THINKING}[thinking/{effort}] 请求中...{RESET}", flush=True)
 
 
-def render_context_usage(usage: tuple[int, int, int]) -> None:
-    capacity, context_tokens, round_tokens = usage
+def render_session_status(
+    context_tokens: int,
+    capacity: int,
+    thinking_effort: str,
+    permission_mode: str,
+    sandbox_enabled: bool,
+) -> None:
     capacity_label = (
         f"{capacity // 1_000_000}M"
         if capacity >= 1_000_000 and capacity % 1_000_000 == 0
         else f"{capacity:,}"
     )
+    sandbox = "on" if sandbox_enabled else "off"
     print(
-        f"{ANSWER}[context] 当前上下文长度：{context_tokens:,}/{capacity_label}；"
-        f"本轮对话：{round_tokens:,}Tokens{RESET}",
+        f"{ANSWER}thinking:{thinking_effort} 丨 permission:{permission_mode} 丨 "
+        f"sandbox:{sandbox} 丨 context:{context_tokens:,}/{capacity_label}{RESET}",
         flush=True,
     )
 

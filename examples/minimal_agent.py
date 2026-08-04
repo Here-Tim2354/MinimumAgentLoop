@@ -22,7 +22,6 @@ def main() -> None:
     # messages 是整个会话的上下文，模型每次都会看到之前的 assistant 和 tool 消息。
     # 不同消息（user、assistant、tool）形状不同，交给 SDK 统一接收。
     messages: list[Any] = [{"role": "system", "content": SYSTEM_PROMPT}]
-    previous_context_tokens: int | None = None
 
     # 外层循环处理用户消息，内层循环处理同一条消息可能触发的多次工具调用。
     while True:
@@ -62,9 +61,13 @@ def main() -> None:
             calls = message.get("tool_calls") or []
             if not calls:
                 support.render_answer(message.get("content") or "")
-                usage = runtime.context_usage(response, previous_context_tokens)
-                support.render_context_usage(usage)
-                previous_context_tokens = usage[1]
+                support.render_session_status(
+                    response.usage.total_tokens,
+                    runtime.CONTEXT_WINDOW,
+                    runtime.thinking_effort(),
+                    runtime.permission_mode(),
+                    runtime.sandbox_enabled(),
+                )
                 break
 
             # 一次响应可能包含多个 Bash 调用，全部执行后再让模型继续判断。

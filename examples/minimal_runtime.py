@@ -79,19 +79,6 @@ def thinking_options() -> dict[str, Any]:
     }
 
 
-def context_usage(
-    response, previous_context_tokens: int | None
-) -> tuple[int, int, int]:
-    """返回当前完整上下文长度，以及和上一轮的 token 差值。"""
-    current_context_tokens = response.usage.total_tokens
-    previous = previous_context_tokens or 0
-    return (
-        CONTEXT_WINDOW,
-        current_context_tokens,
-        max(0, current_context_tokens - previous),
-    )
-
-
 def _command_tool(name: str, description: str) -> dict[str, Any]:
     """生成两个形状相同的命令工具描述，避免重复 JSON。"""
     return {
