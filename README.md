@@ -58,11 +58,12 @@ python examples/minimal_agent.py
 
 | 命令 | 作用 |
 | --- | --- |
-| `/auto` | 由模型自动审核工具调用 |
-| `/ask-me` | 每次工具调用都询问用户 |
-| `/deny` | 拒绝工具调用 |
-| `/yolo` | 跳过权限审核 |
-| `/on` / `/off` | 开启或关闭沙盒 |
+| `/permission-auto` | 由模型自动审核工具调用 |
+| `/permission-ask` | 每次工具调用都询问用户 |
+| `/permission-deny` | 拒绝工具调用 |
+| `/permission-yolo` | 跳过权限审核 |
+| `/sandbox-on` / `/sandbox-off` | 开启或关闭沙盒 |
+| `/think-off` / `/think-high` / `/think-max` | 关闭思考，或切换思考档位 |
 | `/expand` | 展开本轮工具输出 |
 | `/exit` 或 `Ctrl+C` | 退出 |
 

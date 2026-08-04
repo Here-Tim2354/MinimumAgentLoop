@@ -11,20 +11,23 @@ PERMISSION = "\033[38;5;214m"  # 权限请求使用醒目的橙色。
 _tool_outputs: list[str] = []  # 保存当前用户请求产生的全部工具输出。
 
 
-def render_welcome(sandbox_enabled: bool, permission_mode: str) -> None:
+def render_welcome(
+    sandbox_enabled: bool, permission_mode: str, thinking_effort: str
+) -> None:
     sandbox_state = "开启" if sandbox_enabled else "关闭"
     print(
-        "\n权限：/auto 自动审核 | /ask-me 每次询问 | /deny 拒绝工具 | /yolo 跳过审核"
-        "\n沙盒：/on 开启 | /off 关闭"
+        "\n权限：/permission-auto | /permission-ask | /permission-deny | /permission-yolo"
+        "\n沙盒：/sandbox-on | /sandbox-off"
+        "\n思考：/think-off | /think-high | /think-max"
         "\n其他：/expand 展开本轮工具输出 | /exit 或 Ctrl+C 退出"
-        f"\n当前：沙盒{sandbox_state}；权限：{permission_mode}。"
+        f"\n当前：沙盒{sandbox_state}；权限：{permission_mode}；思考：{thinking_effort}。"
         "\nWindows 首次运行前执行：npm run sandbox:install（需要一次 UAC）。"
     )
 
 
-def render_thinking() -> None:
-    # 先显示状态，用户能看到模型请求正在进行，即使本次没有 reasoning_content。
-    print(f"\n{THINKING}[thinking] 思考中...{RESET}", flush=True)
+def render_thinking(effort: str) -> None:
+    # 先显示状态，用户能看到模型请求正在进行和当前思考档位。
+    print(f"\n{THINKING}[thinking/{effort}] 请求中...{RESET}", flush=True)
 
 
 def render_context_usage(usage: tuple[int, int, int]) -> None:

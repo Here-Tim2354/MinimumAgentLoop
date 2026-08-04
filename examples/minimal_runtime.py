@@ -18,7 +18,14 @@ MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 REVIEW_MODEL = os.getenv("DEEPSEEK_REVIEW_MODEL", MODEL)
 _permission_mode = os.getenv("PERMISSION_MODE", "autoreview").lower()
 _sandbox_enabled = True
+_thinking_effort = "max"
 CONTEXT_WINDOW = int(os.getenv("DEEPSEEK_CONTEXT_WINDOW", "1000000"))
+PERMISSION_COMMANDS = {
+    "/permission-auto": "autoreview",
+    "/permission-ask": "manual",
+    "/permission-deny": "deny",
+    "/permission-yolo": "yolo",
+}
 _LOCAL_SRT = Path(__file__).resolve().parents[1] / "node_modules" / ".bin" / (
     "srt.cmd" if os.name == "nt" else "srt"
 )
@@ -29,7 +36,9 @@ SRT_COMMAND = os.getenv(
 
 def permission_mode() -> str:
     """返回当前会话的权限模式。"""
-    return _permission_mode
+    return {"autoreview": "auto", "manual": "ask"}.get(
+        _permission_mode, _permission_mode
+    )
 
 
 def set_permission_mode(mode: str) -> None:
@@ -47,6 +56,27 @@ def set_sandbox_enabled(enabled: bool) -> None:
     """让 CLI 斜杠命令切换当前会话的沙盒。"""
     global _sandbox_enabled
     _sandbox_enabled = enabled
+
+
+def thinking_effort() -> str:
+    """返回当前会话的思考档位。"""
+    return _thinking_effort
+
+
+def set_thinking_effort(effort: str) -> None:
+    """让 CLI 斜杠命令切换当前会话的思考档位。"""
+    global _thinking_effort
+    _thinking_effort = effort
+
+
+def thinking_options() -> dict[str, Any]:
+    """把思考档位转换成 DeepSeek API 参数。"""
+    if _thinking_effort == "off":
+        return {"extra_body": {"thinking": {"type": "disabled"}}}
+    return {
+        "reasoning_effort": _thinking_effort,
+        "extra_body": {"thinking": {"type": "enabled"}},
+    }
 
 
 def context_usage(
@@ -209,7 +239,7 @@ def run_tool(
         return f"Unknown tool: {name}", None
 
     decision, reason = _permission(client, name, command, user_request)
-    audit = f"{_permission_mode}: {decision} — {reason}"
+    audit = f"{permission_mode()}: {decision} — {reason}"
 
     if decision != "allow":
         return f"[permission denied]\n{reason}", audit

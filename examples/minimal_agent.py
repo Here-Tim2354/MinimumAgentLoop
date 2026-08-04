@@ -12,19 +12,16 @@ from openai import OpenAI
 
 def main() -> None:
     # 启动时展示会话控制命令和当前运行状态。
-    support.render_welcome(runtime.sandbox_enabled(), runtime.permission_mode())
+    support.render_welcome(
+        runtime.sandbox_enabled(), runtime.permission_mode(), runtime.thinking_effort()
+    )
     client = OpenAI(
         api_key=os.environ["DEEPSEEK_API_KEY"],
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
     )
     # messages 是整个会话的上下文，模型每次都会看到之前的 assistant 和 tool 消息。
     # 不同消息（user、assistant、tool）形状不同，交给 SDK 统一接收。
-    messages: list[Any] = [
-        {
-            "role": "system",
-            "content": SYSTEM_PROMPT,
-        },
-    ]
+    messages: list[Any] = [{"role": "system", "content": SYSTEM_PROMPT}]
     previous_context_tokens: int | None = None
 
     # 外层循环处理用户消息，内层循环处理同一条消息可能触发的多次工具调用。
@@ -32,33 +29,30 @@ def main() -> None:
         prompt = support.read_user_message()
         if not prompt:
             break
-        if prompt in {"/auto", "/ask-me", "/deny", "/yolo"}:
-            mode = {
-                "/auto": "autoreview",
-                "/ask-me": "manual",
-                "/deny": "deny",
-                "/yolo": "yolo",
-            }[prompt]
-            runtime.set_permission_mode(mode)
+        if prompt in runtime.PERMISSION_COMMANDS:
+            runtime.set_permission_mode(runtime.PERMISSION_COMMANDS[prompt])
             support.render_permission(f"权限模式已切换为 {runtime.permission_mode()}")
             continue
-        if prompt in {"/on", "/off"}:
-            runtime.set_sandbox_enabled(prompt == "/on")
+        if prompt in {"/sandbox-on", "/sandbox-off"}:
+            runtime.set_sandbox_enabled(prompt == "/sandbox-on")
             state = "开启" if runtime.sandbox_enabled() else "关闭"
             destination = "使用 srt" if runtime.sandbox_enabled() else "直接在宿主机执行"
             support.render_permission(f"沙盒已{state}；bash 将{destination}")
+            continue
+        if prompt in {"/think-off", "/think-high", "/think-max"}:
+            runtime.set_thinking_effort(prompt.removeprefix("/think-"))
+            support.render_permission(f"思考档位已切换为 {runtime.thinking_effort()}")
             continue
 
         messages.append({"role": "user", "content": prompt})
 
         while True:
-            support.render_thinking()
+            support.render_thinking(runtime.thinking_effort())
             response = client.chat.completions.create(
                 model=runtime.MODEL,
                 messages=messages,
                 tools=runtime.TOOLS,
-                reasoning_effort="max",
-                extra_body={"thinking": {"type": "enabled"}},
+                **runtime.thinking_options(),
             )
             message: dict[str, Any] = response.choices[0].message.model_dump(exclude_none=True)
             # assistant 消息必须先写回上下文，下一次请求才能知道刚才做了什么。
