@@ -1,60 +1,29 @@
 # MinimumAgentLoop
 
-一个用于理解 AgentLoop 的极简 Python 示例：模型可以思考、调用 Bash 工具、接收工具结果，再继续生成最终回答。
+这是我开发的一个用于理解 AgentLoop 的极简 Python 示例。**核心文件 `minimal_agent.py` 不到 100 行**
+
+核心文件非常简单，两层 While 循环就可以让模型思考、调用 Bash/Web 工具、接收工具结果，再继续生成最终回答。
 
 ```text
 用户输入 -> LLM -> 工具调用 -> 权限检查 -> Shell -> 工具结果 -> LLM
                 \-> 无工具调用 -----------------------> 最终回答
 ```
 
-## 运行要求
+## 功能
 
-- Python 3.10+
-- Node.js 20.11+
-- DeepSeek API Key
+本项目高度基于 `DeepSeek-v4-flash-0731` 开发，并且采用 `Response API` 进行模型调用。
 
-## 安装
+我加入了不少现代 Agent 所必备的功能，比如：
+1. 自动审核命令
+2. 思考档位调整
+3. 工具调用权限设置
+4. 沙箱开关
+5. 联网搜索（Deepseek 官方支持）
 
-```bash
-npm install
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
+也加入了一些用户体验的优化，比如文字颜色渲染，默认折叠工具调用结果。
 
-Windows PowerShell 激活虚拟环境：
+通过以下命令开关：
 
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-Windows 首次使用沙盒前还需要执行：
-
-```powershell
-npm run sandbox:install
-```
-
-## 运行
-
-项目不会自动读取 `.env`，请先设置环境变量。
-
-macOS / Linux：
-
-```bash
-export DEEPSEEK_API_KEY="sk-..."
-python examples/minimal_agent.py
-```
-
-Windows PowerShell：
-
-```powershell
-$env:DEEPSEEK_API_KEY="sk-..."
-python examples/minimal_agent.py
-```
-
-其他配置可以参考 [.env.example](.env.example)。
-
-## 会话命令
 
 | 命令 | 作用 |
 | --- | --- |
@@ -67,7 +36,66 @@ python examples/minimal_agent.py
 | `/expand` | 展开本轮工具输出 |
 | `/exit` 或 `Ctrl+C` | 退出 |
 
-## 文件结构
+## 取舍
+
+代码量是有意控制的。本项目完全没有任何的：
+1. 上下文管理机制
+2. `AGSNTS.md/SKILLS` 规范支持
+3. subagents/browser use 等高级功能
+4. 数据校验，防御性/安全性编程
+
+好吧，沙箱是个例外。为了避免大肥鱼意外地删掉了新生们的文件。
+
+## 运行要求
+
+
+## 安装
+
+确保电脑有以下环境：
+
+- Python 3.10+
+- Node.js 20.11+
+
+需要有 DeepSeek 官方 API 的密钥：
+- DeepSeek API Key
+
+
+通过以下命令将文件安装到本地：
+
+```bash
+git clone https://github.com/Here-Tim2354/MinimumAgentLoop.git
+cd MinimumAgentLoop
+npm install
+pip install -r requirements.txt
+```
+
+Windows 首次使用沙盒前还需要执行：
+
+```powershell
+npm run sandbox:install
+```
+
+## 运行
+
+复制 [.env.example](.env.example) 为 `.env` 并填入 `DEEPSEEK_API_KEY`，程序启动时会自动加载你的密钥。
+
+也可以直接通过环境变量来存放你的密钥（仅限该终端窗口）。如果是 Mac：
+```bash
+export DEEPSEEK_API_KEY="sk-..."
+```
+
+如果是 Windows：
+```powershell
+$env:DEEPSEEK_API_KEY="sk-..."
+```
+
+通过以下命令执行本程序：
+```bash
+python examples/minimal_agent.py
+```
+
+
+## 项目结构
 
 | 文件 | 职责 |
 | --- | --- |
@@ -75,10 +103,6 @@ python examples/minimal_agent.py
 | `examples/minimal_runtime.py` | 工具、沙盒和权限审核 |
 | `examples/minimal_support.py` | 终端输入与渲染 |
 | `examples/minimal_prompts.py` | Agent 与审核模型提示词 |
-
-## 教学范围
-
-这个项目用于展示多轮工具调用的基本过程，刻意不实现上下文压缩、会话持久化、自动重试和生产级框架能力。
 
 ## License
 

@@ -14,6 +14,7 @@ _tool_outputs: list[str] = []  # 保存当前用户请求产生的全部工具�
 def render_welcome(
     sandbox_enabled: bool, permission_mode: str, thinking_effort: str
 ) -> None:
+    """打印欢迎信息和当前会话状态。"""
     sandbox_state = "开启" if sandbox_enabled else "关闭"
     print(
         "\n权限：/permission-auto | /permission-ask | /permission-deny | /permission-yolo"
@@ -26,7 +27,7 @@ def render_welcome(
 
 
 def render_thinking(effort: str) -> None:
-    # 先显示状态，用户能看到模型请求正在进行和当前思考档位。
+    """显示模型请求状态和思考档位。"""
     print(f"\n{THINKING}[thinking/{effort}] 请求中...{RESET}", flush=True)
 
 
@@ -37,9 +38,10 @@ def render_session_status(
     permission_mode: str,
     sandbox_enabled: bool,
 ) -> None:
+    """打印本轮请求的上下文用量和运行状态。"""
     capacity_label = (
         f"{capacity // 1_000_000}M"
-        if capacity >= 1_000_000 and capacity % 1_000_000 == 0
+        if capacity % 1_000_000 == 0
         else f"{capacity:,}"
     )
     sandbox = "on" if sandbox_enabled else "off"
@@ -51,32 +53,46 @@ def render_session_status(
 
 
 def render_reasoning(content: str) -> None:
-    # reasoning_content 是模型已经返回的思考文本，用灰色和最终回答区分开。
+    """显示模型返回的 reasoning 思考文本。"""
     print(f"{THINKING}[thinking] 思考内容{RESET}\n{THINKING}{content}{RESET}")
 
 
 def render_tool_call(name: str, command: str) -> None:
-    # 普通和特权工具都用 LSP 色，但保留工具名让越权请求可见。
+    """显示模型发起的本地工具调用。"""
     print(f"\n{LSP}[tool/{name}] {command}{RESET}")
 
 
+def render_web_search(action: dict | None) -> None:
+    """显示 DeepSeek 服务端联网搜索提示。"""
+    # 服务端会在 queries 末尾塞一个 ws_call_id=... 的追踪项，展示时过滤掉。
+    queries = [q for q in (action or {}).get("queries") or [] if not q.startswith("ws_call_id=")]
+    detail = f"，查询：{'、'.join(queries)}" if queries else ""
+    print(f"\n{LSP}[web_search] DeepSeek 正在联网搜索{detail}……{RESET}")
+
+
 def render_permission(content: str) -> None:
-    # 权限状态和审核结果单独占一行，用户能看见当前模式是否改变。
+    """显示权限状态或审核结果。"""
     print(f"\n{PERMISSION}[permission] {content}{RESET}")
 
 
 def render_think_level(content: str) -> None:
+    """显示思考档位切换提示。"""
     print(f"\n{PERMISSION}[think_level] {content}{RESET}")
 
 
+def render_notice(kind: str, message: str) -> None:
+    """根据通知类别分发到对应的渲染函数。"""
+    (render_permission if kind == "permission" else render_think_level)(message)
+
+
 def render_tool_result(output: str) -> None:
-    # 先保存并折叠输出，避免长日志淹没模型回答；/expand 会显示本轮全部输出。
+    """折叠保存本轮工具输出，避免长日志淹没模型回答。"""
     _tool_outputs.append(output)
     print(f"{TOOL_OUTPUT}[tool output folded — type /expand to show]{RESET}")
 
 
 def expand_tool_output() -> None:
-    # 展开时整块使用灰色，让用户一眼看出这不是 Agent 的回答。
+    """展开显示本轮所有工具输出。"""
     for number, output in enumerate(_tool_outputs, 1):
         print(
             f"\n{TOOL_OUTPUT}--- tool output {number} ---\n"
@@ -85,7 +101,7 @@ def expand_tool_output() -> None:
 
 
 def read_user_message() -> str | None:
-    # 支持层处理展开和退出；权限斜杠命令返回主循环来修改运行时状态。
+    """读取用户输入，处理 /expand 和退出命令。"""
     while True:
         print(f"\n{USER}You> ", end="", flush=True)
         message = input()
@@ -100,9 +116,10 @@ def read_user_message() -> str | None:
 
 
 def render_answer(content: str) -> None:
-    # 这是一次模型循环的最终回答，用蓝色结束当前用户请求。
+    """显示本轮最终回答。"""
     print(f"\n{ANSWER}Agent> {content}{RESET}")
 
 
 def render_goodbye() -> None:
+    """显示退出告别语。"""
     print(f"\n{ANSWER}Agent> 好的，先告辞啦！👋{RESET}", flush=True)

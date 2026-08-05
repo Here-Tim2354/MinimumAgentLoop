@@ -69,34 +69,46 @@ def set_thinking_effort(effort: str) -> None:
     _thinking_effort = effort
 
 
+def apply_slash_command(prompt: str) -> tuple[str, str] | None:
+    """识别并应用会话控制命令，返回 (渲染类别, 提示文案)。"""
+    if prompt in PERMISSION_COMMANDS:
+        set_permission_mode(PERMISSION_COMMANDS[prompt])
+        return "permission", f"权限模式已切换为 {permission_mode()}"
+    if prompt == "/sandbox-on":
+        set_sandbox_enabled(True)
+        return "permission", "沙盒已开启；bash 将使用 srt"
+    if prompt == "/sandbox-off":
+        set_sandbox_enabled(False)
+        return "permission", "沙盒已关闭；bash 将直接在宿主机执行"
+    if prompt in {"/think-off", "/think-high", "/think-max"}:
+        set_thinking_effort(prompt.removeprefix("/think-"))
+        return "think", f"思考档位已切换为 {thinking_effort()}"
+    return None
+
+
 def thinking_options() -> dict[str, Any]:
-    """把思考档位转换成 DeepSeek API 参数。"""
-    if _thinking_effort == "off":
-        return {"extra_body": {"thinking": {"type": "disabled"}}}
-    return {
-        "reasoning_effort": _thinking_effort,
-        "extra_body": {"thinking": {"type": "enabled"}},
-    }
+    """把思考档位转换成 Responses API 的 reasoning 参数。"""
+    effort = "none" if _thinking_effort == "off" else _thinking_effort
+    return {"reasoning": {"effort": effort}}
 
 
 def _command_tool(name: str, description: str) -> dict[str, Any]:
     """生成两个形状相同的命令工具描述，避免重复 JSON。"""
     return {
         "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {
-                "type": "object",
-                "properties": {"command": {"type": "string"}},
-                "required": ["command"],
-            },
+        "name": name,
+        "description": description,
+        "parameters": {
+            "type": "object",
+            "properties": {"command": {"type": "string"}},
+            "required": ["command"],
         },
     }
 
 
-# 只有这两个工具会发给模型：bash 默认先进沙盒，两个工具都受权限模式控制。
+# web_search 由 DeepSeek 服务端执行；bash 默认先进沙盒，两个 shell 工具都受权限模式控制。
 TOOLS: list[Any] = [
+    {"type": "web_search"},
     _command_tool(
         "bash",
         "Run a shell command in the default local srt sandbox. "
@@ -147,7 +159,7 @@ def _run(argv: list[str]) -> str:
 
 
 def _settings_file() -> Path:
-    """为每次沙盒调用生成宿主控制的临时策略，避免项目文件能改权限。"""
+    """生成 srt 策略文件：允许写入工作目录，网络和默认写权限保持关闭。"""
     workspace = Path.cwd().resolve()
     settings = {
         "network": {"allowedDomains": [], "deniedDomains": ["*"]},
@@ -202,12 +214,13 @@ def _review(
         extra_body={"thinking": {"type": "enabled"}},
     )
     decision = json.loads(response.choices[0].message.content or "{}")
-    return decision["decision"], decision.get("reason", "")
+    return decision.get("decision", "deny"), decision.get("reason", "审核返回格式异常")
 
 
 def _permission(
     client: OpenAI, name: str, command: str, user_request: str
 ) -> tuple[str, str]:
+    """根据当前权限模式决定允许、拒绝或提交审核。"""
     if _permission_mode == "yolo":
         return "allow", "已跳过权限审核"
     if _permission_mode == "manual":

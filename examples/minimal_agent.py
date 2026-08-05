@@ -2,7 +2,12 @@
 
 import json
 import os
+from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 import minimal_runtime as runtime  # 工具描述、srt 沙盒、host_bash 和权限模式。
 import minimal_support as support  # 终端输入和渲染。
@@ -19,75 +24,68 @@ def main() -> None:
         api_key=os.environ["DEEPSEEK_API_KEY"],
         base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
     )
-    # messages 是整个会话的上下文，模型每次都会看到之前的 assistant 和 tool 消息。
-    # 不同消息（user、assistant、tool）形状不同，交给 SDK 统一接收。
-    messages: list[Any] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    # inputs 是整个会话的上下文：Responses API 无状态，每次请求全量传。
+    inputs: list[Any] = []
 
     # 外层循环处理用户消息，内层循环处理同一条消息可能触发的多次工具调用。
     while True:
         prompt = support.read_user_message()
         if not prompt:
             break
-        if prompt in runtime.PERMISSION_COMMANDS:
-            runtime.set_permission_mode(runtime.PERMISSION_COMMANDS[prompt])
-            support.render_permission(f"权限模式已切换为 {runtime.permission_mode()}")
-            continue
-        if prompt in {"/sandbox-on", "/sandbox-off"}:
-            runtime.set_sandbox_enabled(prompt == "/sandbox-on")
-            state = "开启" if runtime.sandbox_enabled() else "关闭"
-            destination = "使用 srt" if runtime.sandbox_enabled() else "直接在宿主机执行"
-            support.render_permission(f"沙盒已{state}；bash 将{destination}")
-            continue
-        if prompt in {"/think-off", "/think-high", "/think-max"}:
-            runtime.set_thinking_effort(prompt.removeprefix("/think-"))
-            support.render_think_level(f"思考档位已切换为 {runtime.thinking_effort()}")
+        command = runtime.apply_slash_command(prompt)
+        if command:
+            kind, message = command
+            (support.render_permission if kind == "permission" else support.render_think_level)(message)
             continue
 
-        messages.append({"role": "user", "content": prompt})
+        inputs.append({"role": "user", "content": prompt})
 
         while True:
             support.render_thinking(runtime.thinking_effort())
-            response = client.chat.completions.create(
+            response = client.responses.create(
                 model=runtime.MODEL,
-                messages=messages,
+                instructions=SYSTEM_PROMPT,
+                input=inputs,
                 tools=runtime.TOOLS,
                 **runtime.thinking_options(),
             )
-            message: dict[str, Any] = response.choices[0].message.model_dump(exclude_none=True)
-            # assistant 消息必须先写回上下文，下一次请求才能知道刚才做了什么。
-            messages.append(message)
-            if message.get("reasoning_content"):
-                support.render_reasoning(message["reasoning_content"])
-            calls = message.get("tool_calls") or []
+            # 输出 item 必须先写回上下文，下一轮请求才知道刚才做了什么。
+            calls = []
+            for item in response.output:
+                data = item.model_dump(exclude_none=True)
+                inputs.append(data)
+                if item.type == "reasoning":
+                    text = "".join(p.get("text", "") for p in data.get("content") or [])
+                    if text:
+                        support.render_reasoning(text)
+                elif item.type == "web_search_call":
+                    support.render_web_search(data.get("action"))
+                elif item.type == "function_call":
+                    calls.append(item)
             if not calls:
-                support.render_answer(message.get("content") or "")
+                support.render_answer(response.output_text)
                 support.render_session_status(
-                    response.usage.total_tokens,
-                    runtime.CONTEXT_WINDOW,
-                    runtime.thinking_effort(),
-                    runtime.permission_mode(),
+                    response.usage.total_tokens, runtime.CONTEXT_WINDOW,
+                    runtime.thinking_effort(), runtime.permission_mode(),
                     runtime.sandbox_enabled(),
                 )
                 break
 
             # 一次响应可能包含多个 Bash 调用，全部执行后再让模型继续判断。
             for call in calls:
-                name = call["function"]["name"]
-                command = json.loads(call["function"]["arguments"])["command"]
-                support.render_tool_call(name, command)
+                command = json.loads(call.arguments)["command"]
+                support.render_tool_call(call.name, command)
                 support.render_permission(f"{runtime.permission_mode()} 权限检查中……")
-                output, audit = runtime.run_tool(name, command, client, prompt)
+                output, audit = runtime.run_tool(call.name, command, client, prompt)
                 if audit:
                     support.render_permission(audit)
                 support.render_tool_result(output)
-                # tool_call_id 把执行结果和对应的 assistant 调用配对起来。
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": call["id"],
-                        "content": output,
-                    }
-                )
+                # call_id 把执行结果和对应的 function_call 配对起来。
+                inputs.append({
+                    "type": "function_call_output",
+                    "call_id": call.call_id,
+                    "output": output,
+                })
 
 
 if __name__ == "__main__":
