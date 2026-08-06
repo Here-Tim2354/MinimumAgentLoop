@@ -2,7 +2,7 @@
 # 沙盒、工具执行和权限审核都在 minimal_runtime.py，避免主循环和 UI 互相缠绕。
 RESET = "\033[0m"
 USER = "\033[38;5;220m"  # 偏黄的橙黄色
-LSP = "\033[36m"  # 工具调用使用青色作为 LSP 色
+TOOL_CALL = "\033[36m"  # 工具调用使用青色
 THINKING = "\033[90m"  # 灰色
 TOOL_OUTPUT = "\033[90m"  # 工具输出也用灰色，和思考内容区分开边界。
 ANSWER = "\033[94m"  # 蓝色
@@ -59,7 +59,7 @@ def render_reasoning(content: str) -> None:
 
 def render_tool_call(name: str, command: str) -> None:
     """显示模型发起的本地工具调用。"""
-    print(f"\n{LSP}[tool/{name}] {command}{RESET}")
+    print(f"\n{TOOL_CALL}[tool/{name}] {command}{RESET}")
 
 
 def render_web_search(action: dict | None) -> None:
@@ -67,7 +67,7 @@ def render_web_search(action: dict | None) -> None:
     # 服务端会在 queries 末尾塞一个 ws_call_id=... 的追踪项，展示时过滤掉。
     queries = [q for q in (action or {}).get("queries") or [] if not q.startswith("ws_call_id=")]
     detail = f"，查询：{'、'.join(queries)}" if queries else ""
-    print(f"\n{LSP}[web_search] DeepSeek 正在联网搜索{detail}……{RESET}")
+    print(f"\n{TOOL_CALL}[web_search] DeepSeek 正在联网搜索{detail}……{RESET}")
 
 
 def render_permission(content: str) -> None:
@@ -78,11 +78,6 @@ def render_permission(content: str) -> None:
 def render_think_level(content: str) -> None:
     """显示思考档位切换提示。"""
     print(f"\n{PERMISSION}[think_level] {content}{RESET}")
-
-
-def render_notice(kind: str, message: str) -> None:
-    """根据通知类别分发到对应的渲染函数。"""
-    (render_permission if kind == "permission" else render_think_level)(message)
 
 
 def render_tool_result(output: str) -> None:
